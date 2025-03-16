@@ -1,0 +1,36 @@
+---
+title: "The study on the XXX"
+author: "Group26: JiaweiDeng QingHan PingchuanMA AoQiao XinWang"
+number-sections: true
+format:
+  pdf: default
+  html:
+    embed-resources: true
+    code-tools: true
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+geometry: margin=1in,landscape
+header-includes:
+  - \usepackage{float}
+  - \floatplacement{figure}{H}
+  - \floatplacement{table}{H}
+---
+
+# Introductions
+
+# Data Collection {#sec-DCLT}
+
+# Data Tidying {#sec-DTD}
+
+# Data Summaries {#sec-DSM}
+
+# Data Visualization {#sec-DV}
+
+# Modeling {#sec-Mdl}
+
+# Conclusions {#sec-Conc}
