@@ -1,33 +1,3 @@
----
-title: "The study on the XXX"
-author: "Group26: JiaweiDeng QingHan PingchuanMA AoQiao XinWang"
-number-sections: true
-format:
-  pdf: default
-  html:
-    embed-resources: true
-    code-tools: true
-editor_options: 
-  chunk_output_type: console
-execute:
-  echo: true
-  eval: true
-  warning: false
-  message: false
-geometry: margin=1in,landscape
-header-includes:
-  - \usepackage{float}
-  - \floatplacement{figure}{H}
-  - \floatplacement{table}{H}
----
-
-# Introductions
-
-# Data Collection {#sec-dc}
-
-```{r}
-#| label: libraries
-# Load the necessary package
 library(ggplot2)
 library(glmnet)
 library(tidyverse)
@@ -36,91 +6,43 @@ library(patchwork)
 library(gridExtra)
 library(moderndive)
 library(skimr)
-```
 
-```{r}
-#| label: data
-# Read CSV data
 data <- read.csv('dataset26.csv', na.strings = '?,')
-```
-
-# Data Tidying {#sec-dt}
-
-```{r}
-#| label: tidy
 data <- na.omit(data)
 data <- data %>%
   mutate(across(2:ncol(data), ~ substr(.x, 1, nchar(.x) - 1)))
 write.csv(data, 'cleaned_data.csv', row.names = FALSE)
-```
 
-```{r}
-#| label: trans
 data$Income <- ifelse(data$Income == "<=50", 0, 1)
 data$Education <- as.factor(data$Education)
 data$Marital_Status <- as.factor(data$Marital_Status)
 data$Occupation <- as.factor(data$Occupation)
 data$Sex <- as.factor(data$Sex)
 data$Nationality <- as.factor(data$Nationality)
-
 str(data)
-```
 
-# Data Visualization {#sec-dv}
-
-
-# Full Modeling {#sec-mdl}
-
-```{r}
-#| label: fullmodel
 model <- glm(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hours_PW + Nationality, 
              data = data, 
              family = binomial)
 summary(model)
-```
 
-# P-value {#sec-pvl}
-
-```{r}
-#| label: p-value
 coef_table <- summary(model)$coefficients
 coef_df <- as.data.frame(coef_table)
-
 significant_vars <- coef_df[coef_df$`Pr(>|z|)` < 0.05, ]
 significant_vars
-```
 
-# Stepwise {#sec-stp}
-
-```{r}
-#| label: Stepwise
 stepwise_model <- step(model, direction = "both", trace = 0)
 summary(stepwise_model)
-
 stepwise_aic <- AIC(stepwise_model)
 print(paste("Stepwise AIC: ", stepwise_aic))
-```
-We still need further examination, and we should assess the data correlation to determine the most appropriate regression method to choose.
 
-# Data Correlation {#sec-dcr}
-
-```{r}
-#| label: cor
 num_data <- data[, sapply(data, is.numeric)]
 cor_matrix <- cor(num_data)
 print(cor_matrix)
-
 data_encoded <- model.matrix(~ Education + Marital_Status + Occupation + Sex + Nationality - 1, data = data)
 cor_matrix_encoded <- cor(data_encoded)
 print(cor_matrix_encoded)
-```
 
-We can see that the correlation between the variables is weak, so we can choose Lasso regression.
-
-# Lasso Regression {#sec-lr}
-
-```{r}
-#| label: lasso
 x <- cbind(data_encoded, data$Age)
 y <- data$Income
 lasso_model <- glmnet(x, y, alpha = 1)
@@ -129,6 +51,3 @@ print(paste("Best lambda: ", cv_lasso$lambda.min))
 plot(cv_lasso)
 final_lasso_model <- glmnet(x, y, alpha = 1, lambda = cv_lasso$lambda.min)
 print(coef(final_lasso_model))
-```
-
-# Conclusions {#sec-Conc}
