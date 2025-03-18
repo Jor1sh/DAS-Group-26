@@ -1,0 +1,265 @@
+---
+title: "Key Factors Influencing Income Level"
+author: "Group26: JiaweiDeng QingHan PingchuanMA AoQiao XinWang"
+number-sections: true
+format:
+  pdf: default
+  html:
+    embed-resources: true
+    code-tools: true
+editor_options: 
+  chunk_output_type: console
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+geometry: margin=1in,landscape
+header-includes:
+  - \usepackage{float}
+  - \floatplacement{figure}{H}
+  - \floatplacement{table}{H}
+---
+
+# Introductions
+
+This study aims to identify the key socioeconomic determinants influencing whether an individual earns more than \$50k annually, utilizing data from the 1994 U.S. Census. The dataset comprises a diverse set of socioeconomic attributes, including age, education level, marital status, occupation, sex, hours worked per week, and nationality. The outcome variable, Income, is a binary classification indicating whether an individual's earnings exceed the \$50k threshold.
+
+To achieve this objective, a Generalized Linear Model (GLM) is employed to examine the relationship between income levels and various socioeconomic predictors. In this framework, income serves as the dependent variable, while the remaining attributes function as independent variables, enabling a systematic evaluation of their respective contributions to income disparity.
+
+# Libraries and reading {#sec-lr}
+
+First, we load all the necessary packages required for the analysis.
+
+```{r}
+#| label: libraries
+# Load the necessary package
+library(ggplot2)
+library(glmnet)
+library(tidyverse)
+library(gt)
+library(patchwork)
+library(gridExtra)
+library(moderndive)
+library(skimr)
+```
+
+Next, we import the CSV file from the specified source.
+
+```{r}
+#| label: data
+# Read CSV data
+data <- read.csv('dataset26.csv', na.strings = '?,')
+```
+
+# Data Tidying {#sec-dt}
+
+Initially, we delete the null data, and treat only hours and age as numeric variables.
+
+```{r}
+#| label: tidy
+data <- na.omit(data)
+data <- data %>%
+  mutate(across(2:ncol(data), ~ substr(.x, 1, nchar(.x) - 1)))
+write.csv(data, 'Cleaned_data.csv', row.names = FALSE)
+```
+
+```{r}
+#| label: trans
+data$Income <- ifelse(data$Income == "<=50", 0, 1)
+data$Education <- as.factor(data$Education)
+data$Marital_Status <- as.factor(data$Marital_Status)
+data$Occupation <- as.factor(data$Occupation)
+data$Sex <- as.factor(data$Sex)
+data$Hours_PW <- as.numeric(data$Hours_PW)
+data$Nationality <- as.factor(data$Nationality)
+
+str(data)
+```
+
+# Full Modeling {#sec-mdl}
+
+After fitting the model, we observed that the large number of coefficients makes it difficult to identify the most influential variables.
+
+```{r}
+#| label: fullmodel
+model <- glm(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hours_PW + Nationality, 
+             data = data, 
+             family = binomial)
+summary(model)
+```
+
+# P-value {#sec-pvl}
+
+Therefore, we selected variables with p-values below 0.05 for further analysis.
+
+```{r}
+#| label: p-value
+coef_table <- summary(model)$coefficients
+coef_df <- as.data.frame(coef_table)
+
+significant_vars <- coef_df[coef_df$`Pr(>|z|)` < 0.05, ]
+significant_vars
+```
+
+As observed, **Age**, **Education**, **Marital Status**, **Occupation**, and **Hours Worked per Week** appear to be the most significant variables in this model.
+
+# Data wrangling
+
+Based on stepwise selection, we retained Age, Education, Marital Status, Occupation, and Hours Worked per Week as key variables. Additionally, after analyzing the results of the p-value selection, we transformed Education and Nationality into ordered numerical variables.
+
+To improve interpretability, we consolidated non-significant categories within Marital Status into a single category, "Other", while retaining only the significant category, "Married-civ-spouse", using "Other" as the reference group—indicating whether an individual was married to a civilian spouse. A similar approach was applied to Occupation, where we retained only the "Exec-managerial" category, signifying whether an individual held an executive or managerial position.
+
+```{r}
+#| label: Data wrangling
+
+# Order education level
+edu_levels <- c(
+  "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", 
+  "11th", "12th", "HS-grad", "Some-college", "Assoc-acdm", 
+  "Assoc-voc", "Bachelors", "Masters", "Prof-school", "Doctorate"
+)
+data$Education <- factor(data$Education, levels = edu_levels, ordered = TRUE)
+data$Education <- as.numeric(data$Education)
+
+# Order nationality level
+data$Nationality <- as.factor(data$Nationality)
+data$Nationality <- as.numeric(data$Nationality)
+
+# Merge Occupation
+levels(data$Occupation) <- ifelse(levels(data$Occupation) %in% c("Exec-managerial"), 
+                                      levels(data$Occupation), "Other")
+data$Occupation <- factor(data$Occupation)
+data$Occupation <- relevel(data$Occupation, ref = "Other") # Set “Other” as the base group
+
+# Merge Marital Status
+levels(data$Marital_Status) <- ifelse(levels(data$Marital_Status) %in% c("Married-civ-spouse"), 
+                                      levels(data$Marital_Status), "Other")
+data$Marital_Status <- factor(data$Marital_Status)
+data$Marital_Status <- relevel(data$Marital_Status, ref = "Other") # Set “Other” as the base group
+
+model_new <- glm(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hours_PW + Nationality, 
+             data = data, 
+             family = binomial)
+summary(model_new)
+```
+
+The model is now more concise, and the results of variable selection align with our initial expectations.
+
+# Stepwise {#sec-stp}
+
+```{r}
+#| label: Stepwise
+stepwise_model <- step(model_new, direction = "both", trace = 0)
+summary(stepwise_model)
+
+stepwise_aic <- AIC(stepwise_model)
+print(paste("Stepwise AIC: ", stepwise_aic))
+```
+
+This indicates that the model demonstrates improved performance based on the **Akaike Information Criterion (AIC)**.
+
+# Data Correlation {#sec-dcr}
+
+```{r}
+#| label: cor
+num_data <- data[, sapply(data, is.numeric)]
+cor_matrix <- cor(num_data)
+print(cor_matrix)
+
+data_encoded <- model.matrix(~ Marital_Status + Occupation + Sex- 1, data = data)
+cor_matrix_encoded <- cor(data_encoded)
+print(cor_matrix_encoded)
+```
+
+The correlation matrix reveals some degree of correlation within the data. While multicollinearity is present, its impact on the overall model is minimal. Additionally, Lasso regression effectively mitigates these issues by performing variable selection and regularization.
+
+# Lasso Regression
+
+```{r}
+#| label: lasso
+x <- model.matrix(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hours_PW + Nationality - 1, data = data)
+y <- data$Income
+
+cv_lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial")
+print(paste("Best lambda for Lasso: ", cv_lasso$lambda.min))
+plot(cv_lasso)
+
+final_lasso_model <- glmnet(x, y, alpha = 1, lambda = cv_lasso$lambda.min)
+coef(final_lasso_model)
+```
+
+Based on the analysis, we identified Age, Education, Marital Status (specifically "Married-civ-spouse"), Occupation (specifically "Exec-managerial"), and Hours Worked per Week as the most significant variables influencing income.
+
+# Data Visualization {#sec-dv}
+
+```{r}
+#| label: Visual
+# Extract coefficients from the model_new
+coefnew_df <- as.data.frame(summary(model_new)$coefficients)
+coefnew_df$Variable <- rownames(coefnew_df)
+coefnew_df <- coefnew_df[coefnew_df$`Pr(>|z|)` < 0.05, ]
+coefnew_df$Odds_Ratio <- exp(coefnew_df$Estimate)
+
+ggplot(coefnew_df, aes(x = reorder(Variable, Estimate), y = Estimate)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbar(aes(ymin = Estimate - `Std. Error`, ymax = Estimate + `Std. Error`), width = 0.2) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Log-Odds of Significant Variables",
+       x = "Variables",
+       y = "Log-Odds (Coefficient)")
+
+ggplot(coefnew_df, aes(x = reorder(Variable, Odds_Ratio), y = Odds_Ratio)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbar(aes(ymin = exp(Estimate - `Std. Error`), ymax = exp(Estimate + `Std. Error`)), width = 0.2) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Odds Ratios from model_new",
+       x = "Variables",
+       y = "Odds Ratio")
+```
+
+The bar chart above illustrates the Log-Odds and Odds Ratios from model_new for the selected variables that have the strongest influence on income.
+
+### Explanation of Variables' Impact on Income:
+
+-   **Marital_StatusMarried-civ-spouse**: Being married to a civilian spouse has the highest Odds Ratio, indicating that individuals in this marital status are much more likely to earn over \$50k compared to others.
+
+-   **OccupationExec-managerial**: Holding an executive or managerial position significantly increases the odds of earning more than \$50k.
+
+-   **Education**: Higher levels of education are associated with a higher likelihood of earning more than \$50k, with the Odds Ratio being moderately high.
+
+-   **Age**: Older individuals are slightly more likely to earn more than \$50k, although the impact is relatively smaller compared to other variables.
+
+-   **Hours_PW**: Working more hours per week increases the odds of earning more than \$50k, showing a positive relationship.
+
+-   **(Intercept)**: The baseline value without the influence of the variables indicates the odds of earning over \$50k for individuals who do not meet the conditions of the significant variables.
+
+This chart highlights that **marital status**, **occupation**, and **education** have the most significant impact on income.
+
+# Conclusions {#sec-Conc}
+
+Based on our analysis of the 1994 US Census data, we identified several key factors that significantly influence an individual's income level:
+
+### Education and Occupation
+
+Higher levels of education and specialized occupations (e.g., executive and professional roles) are strongly correlated with higher income levels. Individuals with a bachelor's degree or higher tend to have a greater likelihood of earning above \$50k annually.
+
+### Gender Disparities
+
+The analysis reveals a noticeable gender gap in income distribution, with males having a higher probability of earning more than \$50k compared to females, even after accounting for other socioeconomic factors.
+
+### Nationality Influence
+
+Although nationality has some effect on income levels, it is not as strong as education and occupation. However, individuals born in certain countries tend to have higher or lower probabilities of surpassing the \$50k threshold, possibly due to variations in employment opportunities, language barriers, or systemic factors.
+
+### Working Hours
+
+The number of hours worked per week plays a significant role in income levels. Individuals working more than 40 hours per week are more likely to earn above \$50k, which aligns with expected labor market trends.
+
+### Implications
+
+The results highlight the importance of educational attainment and occupational choices in determining income levels. Policymakers and organizations should consider initiatives to reduce gender-based wage disparities and provide better support for immigrants to integrate into the job market effectively. Further research could focus on longitudinal data to track career progression and income growth over time.
+
+By leveraging data-driven insights, we can foster a more equitable and inclusive labor market, ensuring that all individuals have opportunities for economic advancement.
