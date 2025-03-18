@@ -61,13 +61,13 @@ data$Education <- as.factor(data$Education)
 data$Marital_Status <- as.factor(data$Marital_Status)
 data$Occupation <- as.factor(data$Occupation)
 data$Sex <- as.factor(data$Sex)
+data$Hours_PW <- as.numeric(data$Hours_PW)
 data$Nationality <- as.factor(data$Nationality)
 
 str(data)
 ```
 
 # Data Visualization {#sec-dv}
-
 
 # Full Modeling {#sec-mdl}
 
@@ -100,7 +100,47 @@ summary(stepwise_model)
 stepwise_aic <- AIC(stepwise_model)
 print(paste("Stepwise AIC: ", stepwise_aic))
 ```
+
 We still need further examination, and we should assess the data correlation to determine the most appropriate regression method to choose.
+
+# Data wrangling
+
+On the basis of stepwise selection, we kept the variables ‘Age ’, ‘Education’, ‘Marital_Status’, ‘Occupation’, ‘Hours_PW’. Also after observing the results of the p-value selection, we turned education into ordered numerical variables. And we combined the other non-significant categories in ‘Marital_Status’ into one category, ‘Other’, and retained only the only significant category, ‘Married-civ-spouse’, and set ‘Other’ as the base group, i.e., whether the person was married to a civilian spouse. We did the same for ‘Occupation’, retaining only the ‘Exec-managerial’ category, i.e., whether the person was an Executive or Managerial.
+
+```{r}
+#| label: Data wrangling
+
+# Order education level
+edu_levels <- c(
+  "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", 
+  "11th", "12th", "HS-grad", "Some-college", "Assoc-acdm", 
+  "Assoc-voc", "Bachelors", "Masters", "Prof-school", "Doctorate"
+)
+data$Education <- factor(data$Education, levels = edu_levels, ordered = TRUE)
+data$Education <- as.numeric(data$Education)
+
+# Merge Occupation
+levels(data$Occupation) <- ifelse(levels(data$Occupation) %in% c("Exec-managerial"), 
+                                      levels(data$Occupation), "Other")
+data$Occupation <- factor(data$Occupation)
+data$Occupation <- relevel(data$Occupation, ref = "Other") # Set “Other” as the base group
+
+# Merge Marital Status
+levels(data$Marital_Status) <- ifelse(levels(data$Marital_Status) %in% c("Married-civ-spouse"), 
+                                      levels(data$Marital_Status), "Other")
+data$Marital_Status <- factor(data$Marital_Status)
+data$Marital_Status <- relevel(data$Marital_Status, ref = "Other") # Set “Other” as the base group
+
+model_new <- glm(
+  Income ~ Age + Education + Marital_Status + Occupation + Hours_PW,
+  data = data,
+  family = binomial
+)
+
+summary(model_new)
+```
+
+We can see that the model after DATA WRANGLING performs much better in AIC, and the variables are all highly significant.
 
 # Data Correlation {#sec-dcr}
 
