@@ -1,5 +1,5 @@
 ---
-title: "The study on the XXX"
+title: "Key Factors Influencing Income Level"
 author: "Group26: JiaweiDeng QingHan PingchuanMA AoQiao XinWang"
 number-sections: true
 format:
@@ -23,7 +23,13 @@ header-includes:
 
 # Introductions
 
-# Data Collection {#sec-dc}
+This report aims to identify the key factors based on the 1994 US Census data that influence whether an individual earns more than \$50k per year. The dataset includes a variety of socioeconomic variables, such as age, education level, marital status, occupation, sex, hours worked per week, and nationality. The response variable, Income, is a binary classification indicating whether an individual's income exceeds \$50k annually or not.
+
+To address this task, we will utilize a Generalized Linear Model (GLM) to model the relationship between income and the various socioeconomic factors. The income variable will serve as the dependent variable, while the other variables will act as predictors.
+
+# Libraries and reading {#sec-lr}
+
+First of all we library all the package we may need.
 
 ```{r}
 #| label: libraries
@@ -38,6 +44,8 @@ library(moderndive)
 library(skimr)
 ```
 
+Then we read the csv from the resource.
+
 ```{r}
 #| label: data
 # Read CSV data
@@ -45,6 +53,8 @@ data <- read.csv('dataset26.csv', na.strings = '?,')
 ```
 
 # Data Tidying {#sec-dt}
+
+Initially, we delete the null data, and treat only hours and age as numeric variables.
 
 ```{r}
 #| label: tidy
@@ -67,9 +77,9 @@ data$Nationality <- as.factor(data$Nationality)
 str(data)
 ```
 
-# Data Visualization {#sec-dv}
-
 # Full Modeling {#sec-mdl}
+
+We fit the model, find that the coefficients are too many, it is really hard to see the vital variables.
 
 ```{r}
 #| label: fullmodel
@@ -81,6 +91,8 @@ summary(model)
 
 # P-value {#sec-pvl}
 
+So we selected variables with p-values less than 0.05
+
 ```{r}
 #| label: p-value
 coef_table <- summary(model)$coefficients
@@ -90,34 +102,27 @@ significant_vars <- coef_df[coef_df$`Pr(>|z|)` < 0.05, ]
 significant_vars
 ```
 
-# Stepwise {#sec-stp}
-
-```{r}
-#| label: Stepwise
-stepwise_model <- step(model, direction = "both", trace = 0)
-summary(stepwise_model)
-
-stepwise_aic <- AIC(stepwise_model)
-print(paste("Stepwise AIC: ", stepwise_aic))
-```
-
-We still need further examination, and we should assess the data correlation to determine the most appropriate regression method to choose.
+As we can see, the ‘Age ’, ‘Education’, ‘Marital_Status’, ‘Occupation’ and ‘Hours_PW’ seem more important in this model.
 
 # Data wrangling
 
-On the basis of stepwise selection, we kept the variables ‘Age ’, ‘Education’, ‘Marital_Status’, ‘Occupation’, ‘Hours_PW’. Also after observing the results of the p-value selection, we turned education into ordered numerical variables. And we combined the other non-significant categories in ‘Marital_Status’ into one category, ‘Other’, and retained only the only significant category, ‘Married-civ-spouse’, and set ‘Other’ as the base group, i.e., whether the person was married to a civilian spouse. We did the same for ‘Occupation’, retaining only the ‘Exec-managerial’ category, i.e., whether the person was an Executive or Managerial.
+On the basis of stepwise selection, we kept the variables ‘Age ’, ‘Education’, ‘Marital_Status’, ‘Occupation’, ‘Hours_PW’. Also after observing the results of the p-value selection, we turned education and nationality into ordered numerical variables. And we combined the other non-significant categories in ‘Marital_Status’ into one category, ‘Other’, and retained only the only significant category, ‘Married-civ-spouse’, and set ‘Other’ as the base group, i.e., whether the person was married to a civilian spouse. We did the same for ‘Occupation’, retaining only the ‘Exec-managerial’ category, i.e., whether the person was an Executive or Managerial.
 
 ```{r}
 #| label: Data wrangling
 
 # Order education level
 edu_levels <- c(
-  "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", 
+  "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", 
   "11th", "12th", "HS-grad", "Some-college", "Assoc-acdm", 
   "Assoc-voc", "Bachelors", "Masters", "Prof-school", "Doctorate"
 )
 data$Education <- factor(data$Education, levels = edu_levels, ordered = TRUE)
 data$Education <- as.numeric(data$Education)
+
+# Order nationality level
+data$Nationality <- as.factor(data$Nationality)
+data$Nationality <- as.numeric(data$Nationality)
 
 # Merge Occupation
 levels(data$Occupation) <- ifelse(levels(data$Occupation) %in% c("Exec-managerial"), 
@@ -131,16 +136,26 @@ levels(data$Marital_Status) <- ifelse(levels(data$Marital_Status) %in% c("Marrie
 data$Marital_Status <- factor(data$Marital_Status)
 data$Marital_Status <- relevel(data$Marital_Status, ref = "Other") # Set “Other” as the base group
 
-model_new <- glm(
-  Income ~ Age + Education + Marital_Status + Occupation + Hours_PW,
-  data = data,
-  family = binomial
-)
-
+model_new <- glm(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hours_PW + Nationality, 
+             data = data, 
+             family = binomial)
 summary(model_new)
 ```
 
-We can see that the model after DATA WRANGLING performs much better in AIC, and the variables are all highly significant.
+The model looks more concise, and the results of variable filtering are as expected from the first time.
+
+# Stepwise {#sec-stp}
+
+```{r}
+#| label: Stepwise
+stepwise_model <- step(model_new, direction = "both", trace = 0)
+summary(stepwise_model)
+
+stepwise_aic <- AIC(stepwise_model)
+print(paste("Stepwise AIC: ", stepwise_aic))
+```
+
+This shows that the data also performs much better in AIC.
 
 # Data Correlation {#sec-dcr}
 
@@ -150,25 +165,75 @@ num_data <- data[, sapply(data, is.numeric)]
 cor_matrix <- cor(num_data)
 print(cor_matrix)
 
-data_encoded <- model.matrix(~ Education + Marital_Status + Occupation + Sex + Nationality - 1, data = data)
+data_encoded <- model.matrix(~ Marital_Status + Occupation + Sex- 1, data = data)
 cor_matrix_encoded <- cor(data_encoded)
 print(cor_matrix_encoded)
 ```
 
-We can see that the correlation between the variables is weak, so we can choose Lasso regression.
+The correlation matrix indicates that the data exhibits some level of correlation. Although there is multicollinearity, it has little impact on the overall model. Lasso regression effectively handles these issues.
 
-# Lasso Regression {#sec-lr}
+# Lasso Regression
 
 ```{r}
 #| label: lasso
-x <- cbind(data_encoded, data$Age)
+x <- model.matrix(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hours_PW + Nationality - 1, data = data)
 y <- data$Income
-lasso_model <- glmnet(x, y, alpha = 1)
-cv_lasso <- cv.glmnet(x, y, alpha = 1)
-print(paste("Best lambda: ", cv_lasso$lambda.min))
+
+cv_lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial")
+print(paste("Best lambda for Lasso: ", cv_lasso$lambda.min))
 plot(cv_lasso)
+
 final_lasso_model <- glmnet(x, y, alpha = 1, lambda = cv_lasso$lambda.min)
-print(coef(final_lasso_model))
+coef(final_lasso_model)
 ```
+
+Based on the above, we selected age, education, marital status as "Married-civ-spouse," occupation as "Exec-managerial," and hours_pw as the most significant variables influencing income.
+
+# Data Visualization {#sec-dv}
+
+```{r}
+#| label: Visual
+# Extract coefficients from the model_new
+coefnew_df <- as.data.frame(summary(model_new)$coefficients)
+coefnew_df$Variable <- rownames(coefnew_df)
+coefnew_df <- coefnew_df[coefnew_df$`Pr(>|z|)` < 0.05, ]
+coefnew_df$Odds_Ratio <- exp(coefnew_df$Estimate)
+
+ggplot(coefnew_df, aes(x = reorder(Variable, Estimate), y = Estimate)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbar(aes(ymin = Estimate - `Std. Error`, ymax = Estimate + `Std. Error`), width = 0.2) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Log-Odds of Significant Variables",
+       x = "Variables",
+       y = "Log-Odds (Coefficient)")
+
+ggplot(coefnew_df, aes(x = reorder(Variable, Odds_Ratio), y = Odds_Ratio)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbar(aes(ymin = exp(Estimate - `Std. Error`), ymax = exp(Estimate + `Std. Error`)), width = 0.2) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Odds Ratios from model_new",
+       x = "Variables",
+       y = "Odds Ratio")
+```
+
+The bar chart above displays the Log-Odds and Odds Ratios from model_new for the selected variables that most significantly influence income.
+
+### Explanation of Variables' Impact on Income:
+
+-   **Marital_StatusMarried-civ-spouse**: Being married to a civilian spouse has the highest Odds Ratio, indicating that individuals in this marital status are much more likely to earn over \$50k compared to others.
+
+-   **OccupationExec-managerial**: Holding an executive or managerial position significantly increases the odds of earning more than \$50k.
+
+-   **Education**: Higher levels of education are associated with a higher likelihood of earning more than \$50k, with the Odds Ratio being moderately high.
+
+-   **Age**: Older individuals are slightly more likely to earn more than \$50k, although the impact is relatively smaller compared to other variables.
+
+-   **Hours_PW**: Working more hours per week increases the odds of earning more than \$50k, showing a positive relationship.
+
+-   **(Intercept)**: The baseline value without the influence of the variables indicates the odds of earning over \$50k for individuals who do not meet the conditions of the significant variables.
+
+This chart highlights that **marital status**, **occupation**, and **education** have the most significant impact on income.
 
 # Conclusions {#sec-Conc}
