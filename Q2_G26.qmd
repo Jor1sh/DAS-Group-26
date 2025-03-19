@@ -21,15 +21,15 @@ header-includes:
   - \floatplacement{table}{H}
 ---
 
-# Introductions
+# Introductions {#sec-intro}
 
-This report aims to identify the key factors based on the 1994 US Census data that influence whether an individual earns more than \$50k per year. The dataset includes a variety of socioeconomic variables, such as age, education level, marital status, occupation, sex, hours worked per week, and nationality. The response variable, Income, is a binary classification indicating whether an individual's income exceeds \$50k annually or not.
+This study aims to identify the key socioeconomic determinants influencing whether an individual earns more than \$50k annually, utilizing data from the 1994 U.S. Census. The dataset comprises a diverse set of socioeconomic attributes, including age, education level, marital status, occupation, sex, hours worked per week, and nationality. The outcome variable, Income, is a binary classification indicating whether an individual's earnings exceed the \$50k threshold.
 
-To address this task, we will utilize a Generalized Linear Model (GLM) to model the relationship between income and the various socioeconomic factors. The income variable will serve as the dependent variable, while the other variables will act as predictors.
+To achieve this objective, a Generalized Linear Model (GLM) is employed to examine the relationship between income levels and various socioeconomic predictors. In this framework, income serves as the dependent variable, while the remaining attributes function as independent variables, enabling a systematic evaluation of their respective contributions to income disparity.
 
 # Libraries and reading {#sec-lr}
 
-First of all we library all the package we may need.
+First, we load all the necessary packages required for the analysis.
 
 ```{r}
 #| label: libraries
@@ -42,9 +42,10 @@ library(patchwork)
 library(gridExtra)
 library(moderndive)
 library(skimr)
+library(sjPlot)
 ```
 
-Then we read the csv from the resource.
+Then we import the CSV file from the specified source.
 
 ```{r}
 #| label: data
@@ -52,7 +53,9 @@ Then we read the csv from the resource.
 data <- read.csv('dataset26.csv', na.strings = '?,')
 ```
 
-# Data Tidying {#sec-dt}
+# Initial Model {#sec-mdl1}
+
+## Data Tidying
 
 Initially, we delete the null data, and treat only hours and age as numeric variables.
 
@@ -77,9 +80,9 @@ data$Nationality <- as.factor(data$Nationality)
 str(data)
 ```
 
-# Full Modeling {#sec-mdl}
+## Full Modeling
 
-We fit the model, find that the coefficients are too many, it is really hard to see the vital variables.
+After fitting the model, we observed that the large number of coefficients makes it difficult to identify the most influential variables.
 
 ```{r}
 #| label: fullmodel
@@ -89,9 +92,7 @@ model <- glm(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hour
 summary(model)
 ```
 
-# P-value {#sec-pvl}
-
-So we selected variables with p-values less than 0.05
+Therefore, we selected variables with p-values below 0.05 for further analysis.
 
 ```{r}
 #| label: p-value
@@ -102,15 +103,16 @@ significant_vars <- coef_df[coef_df$`Pr(>|z|)` < 0.05, ]
 significant_vars
 ```
 
-As we can see, the ‘Age ’, ‘Education’, ‘Marital_Status’, ‘Occupation’ and ‘Hours_PW’ seem more important in this model.
+As observed, **Age**, **Education**, **Marital Status**, **Occupation**, and **Hours Worked per Week** appear to be the most significant variables in this model.
 
-# Data wrangling
+# Refined Model {#sec-mdl2}
 
-On the basis of stepwise selection, we kept the variables ‘Age ’, ‘Education’, ‘Marital_Status’, ‘Occupation’, ‘Hours_PW’. Also after observing the results of the p-value selection, we turned education and nationality into ordered numerical variables. And we combined the other non-significant categories in ‘Marital_Status’ into one category, ‘Other’, and retained only the only significant category, ‘Married-civ-spouse’, and set ‘Other’ as the base group, i.e., whether the person was married to a civilian spouse. We did the same for ‘Occupation’, retaining only the ‘Exec-managerial’ category, i.e., whether the person was an Executive or Managerial.
+## Data wrangling
+
+Based on the previous p-value selection, we made adjustments to the variables: the education levels were reclassified, converted into a factor variable in ascending order, and then transformed into continuous numerical values. A similar transformation was applied to nationality. Significant job positions were treated as a separate variable, while other positions were consolidated into a general "Other" category to reduce overfitting in the model. A similar approach was applied to marital status.
 
 ```{r}
 #| label: Data wrangling
-
 # Order education level
 edu_levels <- c(
   "Preschool", "1st-4th", "5th-6th", "7th-8th", "9th", "10th", 
@@ -135,14 +137,70 @@ levels(data$Marital_Status) <- ifelse(levels(data$Marital_Status) %in% c("Marrie
                                       levels(data$Marital_Status), "Other")
 data$Marital_Status <- factor(data$Marital_Status)
 data$Marital_Status <- relevel(data$Marital_Status, ref = "Other") # Set “Other” as the base group
+```
 
+## Data Visualization
+
+```{r}
+#| label: Density plot
+# Select numerical variables for density plotting.
+numeric_vars <- sapply(data, is.numeric)
+data_numeric <- data[, numeric_vars]
+
+# Plot the density graph
+par(mfrow=c(2,2))  # 2x2 
+for (var in names(data_numeric)) {
+  plot(density(data_numeric[[var]]), 
+       col = "blue", 
+       main = paste("Density Plot of", var),
+       xlab = var)
+}
+```
+
+The Density Plots show the distribution of the data, but in GLM, whether the data follows a normal distribution is not a concern for our analysis. Therefore, we only present the distribution of the data here.
+
+Based on the practical context, only age and hours worked are continuous variables in a meaningful sense. Therefore, we only plot the boxplot for these two variables.
+
+```{r}
+#| label: Box plot
+# Define colors
+colors <- c("red", "blue")
+
+# Generate Age vs. Income boxplot
+plot_age <- ggplot(data, aes(x = factor(Income), y = Age, fill = factor(Income))) +
+  geom_boxplot() +
+  scale_fill_manual(values = colors) +
+  xlab('Income') + 
+  ylab('Age') +
+  ggtitle('Age vs. Income Boxplot') +
+  theme_minimal()
+
+# Generate Hours per Week vs. Income boxplot
+plot_hours <- ggplot(data, aes(x = factor(Income), y = Hours_PW, fill = factor(Income))) +
+  geom_boxplot() +
+  scale_fill_manual(values = colors) +
+  xlab('Income') + 
+  ylab('Hours per Week') +
+  ggtitle('Hours per Week vs. Income Boxplot') +
+  theme_minimal()
+
+# Arrange all boxplots in a grid layout
+grid.arrange(plot_age, plot_hours, ncol = 2)
+```
+
+From the chart, it can be observed that higher age seems to be helpful for earning \>50K, while the distribution of hours worked is more scattered.
+
+## New Modeling
+
+```{r}
+#| label: New model
 model_new <- glm(Income ~ Age + Education + Marital_Status + Occupation + Sex + Hours_PW + Nationality, 
              data = data, 
              family = binomial)
 summary(model_new)
 ```
 
-The model looks more concise, and the results of variable filtering are as expected from the first time.
+The model is now more concise, and the results of variable selection align with our initial expectations.
 
 # Stepwise {#sec-stp}
 
@@ -155,7 +213,7 @@ stepwise_aic <- AIC(stepwise_model)
 print(paste("Stepwise AIC: ", stepwise_aic))
 ```
 
-This shows that the data also performs much better in AIC.
+As can be seen, our new model also performs well under AIC, showing the same selection results as the p-value approach.
 
 # Data Correlation {#sec-dcr}
 
@@ -170,7 +228,7 @@ cor_matrix_encoded <- cor(data_encoded)
 print(cor_matrix_encoded)
 ```
 
-The correlation matrix indicates that the data exhibits some level of correlation. Although there is multicollinearity, it has little impact on the overall model. Lasso regression effectively handles these issues.
+The correlation matrix reveals some degree of correlation within the data. While multicollinearity is present, its impact on the overall model is minimal. Additionally, Lasso regression effectively mitigates these issues by performing variable selection and regularization.
 
 # Lasso Regression
 
@@ -187,53 +245,56 @@ final_lasso_model <- glmnet(x, y, alpha = 1, lambda = cv_lasso$lambda.min)
 coef(final_lasso_model)
 ```
 
-Based on the above, we selected age, education, marital status as "Married-civ-spouse," occupation as "Exec-managerial," and hours_pw as the most significant variables influencing income.
+Based on the analysis, we identified Age, Education, Marital Status (specifically "Married-civ-spouse"), Occupation (specifically "Exec-managerial"), and Hours Worked per Week as the most significant variables influencing income.
 
-# Data Visualization {#sec-dv}
+# Log-Odds and Odds Ratios {#sec-lod}
 
 ```{r}
-#| label: Visual
-# Extract coefficients from the model_new
-coefnew_df <- as.data.frame(summary(model_new)$coefficients)
-coefnew_df$Variable <- rownames(coefnew_df)
-coefnew_df <- coefnew_df[coefnew_df$`Pr(>|z|)` < 0.05, ]
-coefnew_df$Odds_Ratio <- exp(coefnew_df$Estimate)
-
-ggplot(coefnew_df, aes(x = reorder(Variable, Estimate), y = Estimate)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  geom_errorbar(aes(ymin = Estimate - `Std. Error`, ymax = Estimate + `Std. Error`), width = 0.2) +
-  coord_flip() +
-  theme_minimal() +
-  labs(title = "Log-Odds of Significant Variables",
-       x = "Variables",
-       y = "Log-Odds (Coefficient)")
-
-ggplot(coefnew_df, aes(x = reorder(Variable, Odds_Ratio), y = Odds_Ratio)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  geom_errorbar(aes(ymin = exp(Estimate - `Std. Error`), ymax = exp(Estimate + `Std. Error`)), width = 0.2) +
-  coord_flip() +
-  theme_minimal() +
-  labs(title = "Odds Ratios from model_new",
-       x = "Variables",
-       y = "Odds Ratio")
+#| label: Odds
+mod.coed.logodds<- model_new %>%
+                   summary() %>%
+                   coef()
+plot_model(model_new, show.values = TRUE, transform = NULL, 
+           title = "Log-Odds", show.p = FALSE)
+plot_model(model_new, show.values = TRUE, axis.lim = c(0, 10000), 
+           title = "Odds Ratio", show.p = FALSE, transform = "exp")
 ```
 
-The bar chart above displays the Log-Odds and Odds Ratios from model_new for the selected variables that most significantly influence income.
+The bar chart above illustrates the Log-Odds and Odds Ratios from model_new for the selected variables that have the strongest influence on income.
 
-### Explanation of Variables' Impact on Income:
+## Explanation of Variables' Impact on Income:
 
--   **Marital_StatusMarried-civ-spouse**: Being married to a civilian spouse has the highest Odds Ratio, indicating that individuals in this marital status are much more likely to earn over \$50k compared to others.
+-   **Marital_StatusMarried-civ-spouse**: Being married to a civilian spouse has the highest Odds Ratio(11.88), indicating that individuals in this marital status are much more likely to earn over \$50k compared to others.
 
--   **OccupationExec-managerial**: Holding an executive or managerial position significantly increases the odds of earning more than \$50k.
+-   **OccupationExec-managerial**: Holding an executive or managerial position significantly increases the odds of earning more than \$50k(2.63).
 
--   **Education**: Higher levels of education are associated with a higher likelihood of earning more than \$50k, with the Odds Ratio being moderately high.
+-   **Education**: Higher levels of education are associated with a higher likelihood of earning more than \$50k, with the Odds Ratio being moderately high(1.42).
 
--   **Age**: Older individuals are slightly more likely to earn more than \$50k, although the impact is relatively smaller compared to other variables.
+-   **Age**: Older individuals are slightly more likely to earn more than \$50k, although the impact is relatively smaller compared to other variables(1.03).
 
--   **Hours_PW**: Working more hours per week increases the odds of earning more than \$50k, showing a positive relationship.
+-   **Hours_PW**: Working more hours per week increases the odds of earning more than \$50k, showing a positive relationship(1.03).
 
--   **(Intercept)**: The baseline value without the influence of the variables indicates the odds of earning over \$50k for individuals who do not meet the conditions of the significant variables.
+-   **Nationality**: The coefficient for nationality in the chart is 1, indicating that the different values of this variable have no impact on the probability of the outcome.
 
-This chart highlights that **marital status**, **occupation**, and **education** have the most significant impact on income.
+-   **Sex**: The coefficient for gender is 0.89 (highlighted in red), which also indicates that the coefficient is not significant.
+
+This chart highlights that **marital status**, **occupation**, and **education** have the most significant impact on income, whereas **sex** and **nationality** have a relatively minor effect.
+
+# Probability continuous {#sec-pcs}
+
+```{r}
+#| label: Probability
+p1 <- plot_model(model_new, type = "pred", terms="Age" ,title = "Age",
+           axis.title = c("Age", "Prob. of income >50K"))
+p2 <- plot_model(model_new, type = "pred", terms="Hours_PW" ,title = "Hours_PW",
+           axis.title = c("Hours_PW", "Prob. of income >50K"))
+grid.arrange(p1,p2,nrow=2)
+```
+
+As we metioned before, only age and hours worked are continuous variables in a meaningful sense. Therefore, we only plot these two variables.
 
 # Conclusions {#sec-Conc}
+
+In summary, the p-value, AIC, and Lasso regression all yield consistent results: gender and nationality have an insignificant impact on whether an individual earns more than $50K, while marital status and holding an executive position exert a stronger influence. Additionally, while factors such as education, age, and hours worked do play a role, they are not decisive in determining high income.
+
+This finding is intriguing, as it suggests that marital status has a significant impact on income levels. However, the opposite conclusion seems more plausible: individuals with higher incomes tend to have more stable marital statuses. Moreover, the primary determinant of an employee's salary within a company appears to be their position. Without a managerial role, factors such as age, working hours, or education have little bearing on income.
