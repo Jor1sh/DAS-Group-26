@@ -1,7 +1,7 @@
 library(sjPlot)
 # Keep only significant variables
-mod.coef.logodds<- stepwise_model %>%
+mod.coef.logodds<- model_new %>%
   summary() %>%
   coef()
-plot_model(stepwise_model, show.values = TRUE, transform = NULL,
+plot_model(model_new, show.values = TRUE, transform = NULL,
            title = "Log-Odds (quality-good)", show.p = FALSE)
